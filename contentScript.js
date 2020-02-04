@@ -81,27 +81,16 @@ const renderers = {
     sizes: [],
 };
 
-// reset
-renderers.positions.push((allElements, frameCount) => {
-    for (const e of allElements) {
-        try {
-            e.style.position = '';
-            e.style.left = '';
-            e.style.top = '';
-            e.style.transform = '';
-        } catch (ignore) { console.log(ignore) }
-    }
-});
-
-// left
+// jump up
 renderers.positions.push((allElements, frameCount) => {
     const volumes = volume.getVolumes(allElements.length, 1.0);
+    const gain = midi.get(8,0, 10);
     let i = 0;
     for (const e of allElements) {
         try {
             e.style.position = '';
             e.style.left = '';
-            e.style.top = `-${volumes[i]}px`;
+            e.style.top = `-${volumes[i] * gain}px`;
         } catch (ignore) { console.log(ignore) }
         i++;
     }
@@ -188,9 +177,11 @@ renderers.sizes.push((allElements) => {
 
 
 let frameCount = 0;
-let  allElements = [];
+let  elements = [];
 reloadElements = () => {
-    allElements = Array.from(document.querySelectorAll('.page-list-item,.page')).filter(e => e.getBoundingClientRect().width > 0);
+    const allElements = Array.from(document.querySelectorAll('.page-list-item,.page')).filter(e => e.getBoundingClientRect().width > 0);
+    const visibleElements = allElements.filter(e => e.getBoundingClientRect().width > 0);
+    elements = visibleElements.length > 0 ? visibleElements : allElements;
 }
 reloadElements();
 const renderEachFrame = () => {
@@ -198,8 +189,6 @@ const renderEachFrame = () => {
     requestAnimationFrame(renderEachFrame);
 
     if (frameCount%60==0) reloadElements();
-    const visibleElements = allElements.filter(e => e.getBoundingClientRect().width > 0);
-    const elements = visibleElements.length > 0 ? visibleElements : allElements;
 
     let channel = 0;
     for (const key in renderers) {
