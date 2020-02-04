@@ -1,3 +1,40 @@
+const random = (min, max) => Math.random() * (max - min) + min;
+
+class MidiController {
+    constructor() {
+        this.data = new Array(64);
+        this.data.fill(64);
+        this.setup();
+    }
+    async setup() {
+        const onMessage = event => {
+            if (event.data[1] >= 16) event.data[1] -= 8;
+            this.data[event.data[1]] = event.data[2];
+        };
+
+        const midi = await navigator.requestMIDIAccess();
+        midi.inputs.forEach(input => {
+            input.onmidimessage = onMessage;
+        });
+
+        const main = async () => {
+            if (!navigator.requestMIDIAccess) return;
+            navigator.requestMIDIAccess();
+        };
+        main();
+    }
+
+    get(channel, min, max) {
+        return (this.data[channel]/127.0) * (max - min) + min;
+    }
+
+    getInt(channel, min, max) {
+        return Math.floor((this.data[channel]/127.0) * (max - min) + min);
+    }
+}
+const midi = new MidiController();
+midi.data[15] = 64;
+
 class VolumeAverage {
     constructor() {
         navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
@@ -24,40 +61,73 @@ class VolumeAverage {
             }
             sums[segment] /= length;
         }
-        return sums;
+        const gain = midi.get(15,0,1) * 2;
+        return sums.map(v => v * gain);
     }
 };
 
 const volume = new VolumeAverage();
 
+
 const style = document.createElement('style');
 document.body.appendChild(style);
 style.innerHTML = `
-html, body {
-  width: 100vw;
-  height: 100vh;
+* {
 }`;
 
-const renderers = []
-renderers.push((allElements) => {
-    const volumes = volume.getVolumes(3, 1.0);
-    const scale = volumes[0]/100.0;
-    const SPEED = 1 / 1000;
-    const RADIUS = 40;
-    let i = 0;
-    const t = new Date().getTime();
+const renderers = {
+    positions: [],
+};
+
+// reset
+renderers.positions.push((allElements, frameCount) => {
     for (const e of allElements) {
         try {
-            if (e.getBoundingClientRect().width === 0) continue;
-            i += RADIUS / allElements.length;
-            e.style.position = 'absolute';
-            e.style.left = `${Math.sin(t * SPEED + i) * RADIUS + 50}%`;
-            e.style.top = `${Math.cos(t * SPEED + i) * RADIUS + 50}%`;
-            e.style.transform = `scale(${scale})`;
+            e.style.position = '';
+            e.style.left = '';
+            e.style.top = '';
+            e.style.transform = '';
         } catch (ignore) { console.log(ignore) }
     }
 });
-renderers.push((allElements) => {
+
+// left
+renderers.positions.push((allElements, frameCount) => {
+    const volumes = volume.getVolumes(allElements.length, 1.0);
+    let i = 0;
+    for (const e of allElements) {
+        try {
+            e.style.position = '';
+            e.style.left = '';
+            e.style.top = `-${volumes[i]}px`;
+            e.style.transform = '';
+        } catch (ignore) { console.log(ignore) }
+        i++;
+    }
+});
+
+// circle
+renderers.positions.push((allElements) => {
+    const volumes = volume.getVolumes(allElements.length/4, 1.0);
+    const SPEED = 1 / 1000;
+    const RADIUS = 40;
+    let i = 0;
+    let r = 0;
+    const t = new Date().getTime();
+    for (const e of allElements) {
+        try {
+            r += RADIUS / allElements.length;
+            e.style.position = 'absolute';
+            e.style.left = `${Math.sin(t * SPEED + r) * RADIUS + 50}%`;
+            e.style.top = `${Math.cos(t * SPEED + r) * RADIUS + 50}%`;
+            const scale = volumes[i%volumes.length] / 100.0 + 0.05;
+            e.style.transform = `scale(${scale})`;
+        } catch (ignore) { console.log(ignore) }
+        i++;
+    }
+});
+// explode by volume
+renderers.positions.push((allElements) => {
     const volumes = volume.getVolumes(allElements.length, 1.0);
     const SPEED = 1 / 1000;
     let i = 0;
@@ -65,7 +135,6 @@ renderers.push((allElements) => {
     for (const e of allElements) {
         i++;
         try {
-            if (e.getBoundingClientRect().width === 0) continue;
             e.style.position = 'absolute';
             const volume = volumes[i] || volumes[(i + 10) % volumes.length] || volumes[(i + 10) % volumes.length];
             const radius = (volume / 100) * (volume / 100) * 100;
@@ -76,29 +145,28 @@ renderers.push((allElements) => {
     }
 });
 
+// random
+renderers.positions.push((allElements, frameCount) => {
+    for (const e of allElements) {
+        try {
+            e.style.position = 'absolute';
+            e.style.left = `${random(0, 100)}%`;
+            e.style.top = `${random(0, 100)}%`;
+            e.style.transform = ``;//scale(${random(0,1)})`;//  rotate(${random(0,360)}deg)`;
+        } catch (ignore) { console.log(ignore) }
+    }
+});
+
+let frameCount = 0;
 const renderEachFrame = () => {
     requestAnimationFrame(renderEachFrame);
     const allElements = Array.from(document.querySelectorAll('.page-list-item,.page')).filter(e => e.getBoundingClientRect().width > 0);
-    renderers[Math.floor((new Date().getTime() / 1000)%2)](allElements);
+    const visibleElements = allElements.filter(e => e.getBoundingClientRect().width > 0);
+    const elements = visibleElements.length > 0 ? visibleElements : allElements;
+
+    for (const key in renderers) {
+        const fn = renderers[key];
+        fn[midi.getInt(0, 0, fn.length-1)](elements, ++frameCount);
+    }
 };
 renderEachFrame();
-
-
-
-if (false) {
-    setInterval(() => {
-        style.innerHTML = `body {
-        transform: scale3d(${Math.random() * 2 + 0.1}, ${Math.random() * 2 + 0.1}, ${Math.random() * 2 + 0.1}) rotate3d(${0}, ${0}, ${1}, ${(new Date().getTime() / 100) % 360}deg);
-        transformOrigin: ${Math.random() * 100}% ${Math.random() * 100}%;
-        transition: all linear 1s;
-    }`;
-    }, 1000);
-
-    setInterval(() => {
-        const allElements = Array.from(document.querySelectorAll('*'));
-        for (const e of allElements) {
-            e.style.background = `rgb(${(Math.random() > 0.5 ? 1 : 0) * 256},${(Math.random() > 0.5 ? 1 : 0) * 256},${(Math.random() > 0.5 ? 1 : 0) * 256})`;
-            e.style.color = `rgb(${(Math.random() > 0.5 ? 1 : 0) * 256},${(Math.random() > 0.5 ? 1 : 0) * 256},${(Math.random() > 0.5 ? 1 : 0) * 256})`;
-        }
-    }, 1000);
-}
