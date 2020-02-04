@@ -73,10 +73,12 @@ const style = document.createElement('style');
 document.body.appendChild(style);
 style.innerHTML = `
 * {
+    transform-origin: 50% 50%;
 }`;
 
 const renderers = {
     positions: [],
+    sizes: [],
 };
 
 // reset
@@ -100,7 +102,6 @@ renderers.positions.push((allElements, frameCount) => {
             e.style.position = '';
             e.style.left = '';
             e.style.top = `-${volumes[i]}px`;
-            e.style.transform = '';
         } catch (ignore) { console.log(ignore) }
         i++;
     }
@@ -120,8 +121,6 @@ renderers.positions.push((allElements) => {
             e.style.position = 'absolute';
             e.style.left = `${Math.sin(t * SPEED + r) * RADIUS + 50}%`;
             e.style.top = `${Math.cos(t * SPEED + r) * RADIUS + 50}%`;
-            const scale = volumes[i%volumes.length] / 100.0 + 0.05;
-            e.style.transform = `scale(${scale})`;
         } catch (ignore) { console.log(ignore) }
         i++;
     }
@@ -140,7 +139,6 @@ renderers.positions.push((allElements) => {
             const radius = (volume / 100) * (volume / 100) * 100;
             e.style.left = `${Math.sin(t * SPEED + i) * radius + 50}%`;
             e.style.top = `${Math.cos(t * SPEED + i) * radius + 50}%`;
-            e.style.transform = `scale(${volume / 100 + 0.1})`;
         } catch (ignore) { console.log(ignore) }
     }
 });
@@ -157,16 +155,57 @@ renderers.positions.push((allElements, frameCount) => {
     }
 });
 
+/// transform
+renderers.sizes.push((allElements) => {
+    const scale = midi.get(9,-5.0,5.0);
+    for (const e of allElements) {
+        try {
+            e.style.transform = `scale(${scale})`;
+        } catch(ignore) { console.log(ignore) }
+    }
+});
+renderers.sizes.push((allElements) => {
+    const partNumber = midi.getInt(9,1,allElements.length);
+    const volumes = volume.getVolumes(partNumber, 1.0);
+    let i = 0;
+    for (const e of allElements) {
+        try {
+            const scale = volumes[i%volumes.length] / 100.0 + 0.05;
+            e.style.transform = `scale(${scale})`;
+        } catch(ignore) { console.log(ignore) }
+        i++;
+    }
+});
+renderers.sizes.push((allElements) => {
+    for (const e of allElements) {
+        try {
+            const scale = Math.random()+0.05;
+            e.style.transform = `scale(${scale})`;
+        } catch(ignore) { console.log(ignore) }
+    }
+});
+
+
+
 let frameCount = 0;
+let  allElements = [];
+reloadElements = () => {
+    allElements = Array.from(document.querySelectorAll('.page-list-item,.page')).filter(e => e.getBoundingClientRect().width > 0);
+}
+reloadElements();
 const renderEachFrame = () => {
+    frameCount++;
     requestAnimationFrame(renderEachFrame);
-    const allElements = Array.from(document.querySelectorAll('.page-list-item,.page')).filter(e => e.getBoundingClientRect().width > 0);
+
+    if (frameCount%60==0) reloadElements();
     const visibleElements = allElements.filter(e => e.getBoundingClientRect().width > 0);
     const elements = visibleElements.length > 0 ? visibleElements : allElements;
 
+    let channel = 0;
     for (const key in renderers) {
         const fn = renderers[key];
-        fn[midi.getInt(0, 0, fn.length-1)](elements, ++frameCount);
+        fn[midi.getInt(channel, 0, fn.length-1)](elements, frameCount);
+        channel++;
     }
 };
 renderEachFrame();
