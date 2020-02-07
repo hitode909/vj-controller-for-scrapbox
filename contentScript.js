@@ -90,6 +90,7 @@ const renderers = {
     sizes: [],
     colors: [],
     bodyTransforms: [],
+    bgs: [],
 };
 
 // jump up
@@ -211,6 +212,7 @@ renderers.colors.push((() => {
 
 
 renderers.colors.push((allElements) => {
+    const hDiff = midi.get(10, 0, 360);
     let h = new Date().getTime() / 10;
     for (const e of allElements) {
         try {
@@ -222,10 +224,11 @@ renderers.colors.push((allElements) => {
 
 let bodyState = 0;
 renderers.bodyTransforms.push((frameCount) => {
-    bodyState = 0;
     document.body.style.transform = '';
     document.body.style.transformOrigin = '';
-    document.body.style.transition = 'all linear 1s';
+
+    document.body.style.transition = 'transform linear 1s';
+    bodyState = 0;
 });
 
 renderers.bodyTransforms.push((() => {
@@ -233,7 +236,7 @@ renderers.bodyTransforms.push((() => {
         if (bodyState === 1) {
             document.body.style.transform = `scale3d(${Math.random() * 2 + 0.1}, ${Math.random() * 2 + 0.1}, ${Math.random() * 2 + 0.1}) rotate3d(${0}, ${0}, ${1}, ${(new Date().getTime() / 100) % 360}deg)`;
             // document.body.style.transformOrigin = `${Math.random() * 100}% ${Math.random() * 100}%`;
-            document.body.style.transition = 'all linear 1s';
+            document.body.style.transition = 'transform linear 1s';
         }
     };
     setInterval(inner, 1000);
@@ -245,12 +248,23 @@ renderers.bodyTransforms.push((() => {
     };
 })());
 
-renderers.bodyTransforms.push((frameCount) => {
+renderers.bodyTransforms.push(() => {
     bodyState = 2;
     document.body.style.transform = `scale(${random(-1,1)})`;
     document.body.style.transition = '';
 });
 
+renderers.bgs.push(() => {
+    document.body.style.background = '';
+});
+renderers.bgs.push(() => {
+    document.body.style.background = 'black';
+});
+renderers.bgs.push((_, frameCount) => {
+    const freq = midi.getInt(12, 128,2);
+    console.log(frameCount, (frameCount % freq), (freq/2));
+    document.body.style.background = (frameCount % freq) < (freq/2) ? 'white' : 'black';
+});
 
 
 let frameCount = 0;
